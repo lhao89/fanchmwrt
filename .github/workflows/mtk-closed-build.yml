@@ -68,11 +68,17 @@ jobs:
       run: |
         set -e
         cd $GITHUB_WORKSPACE
+        # 0) 备份 fanchmwrt 特有内核补丁（fwx 依赖 nf_conn.fwx_data 字段，由官方 hack 补丁定义）
+        mkdir -p /workdir/fanch-patches/hack /workdir/fanch-patches/pending /workdir/fanch-patches/backport /workdir/fanch-patches/mtk
+        cp target/linux/generic/hack-6.12/950-fwx-*.patch /workdir/fanch-patches/hack/
+        cp target/linux/generic/pending-6.12/303-Revert-*.patch /workdir/fanch-patches/pending/
+        cp target/linux/generic/backport-6.12/200-01-v6.13-jiffies-*.patch target/linux/generic/backport-6.12/200-02-v6.14-jiffies-*.patch target/linux/generic/backport-6.12/401-v6.17-mtd-spinand-*.patch target/linux/generic/backport-6.12/404-v6.19-mtd-spinand-*.patch target/linux/generic/backport-6.12/429-*-v6.18-mtd-spinand-*.patch target/linux/generic/backport-6.12/620-v6.15-ppp-*.patch target/linux/generic/backport-6.12/621-v6.17-ppp-*.patch target/linux/generic/backport-6.12/625-v7.0-ppp-*.patch /workdir/fanch-patches/backport/
+        cp target/linux/mediatek/patches-6.12/340-mtd-spinand-*.patch target/linux/mediatek/patches-6.12/601-PCI-mediatek-*.patch /workdir/fanch-patches/mtk/
+        echo "备份 fanchmwrt 特有补丁: hack=$(ls /workdir/fanch-patches/hack | wc -l) pending=$(ls /workdir/fanch-patches/pending | wc -l) backport=$(ls /workdir/fanch-patches/backport | wc -l) mtk=$(ls /workdir/fanch-patches/mtk | wc -l)"
         # 1) 整体替换 mediatek 平台层（补丁/files/dts/config/镜像定义全部来自闭源源树）
         rm -rf target/linux/mediatek
         cp -r /workdir/rebase/target/linux/mediatek target/linux/mediatek
         # 2) 对齐 generic 内核层到 rebase（版本 6.12.108 + 配套补丁/内核配置，闭源补丁以 .108 为基线）
-        #    内核版本定义 + 内核 Kconfig
         cp /workdir/rebase/target/linux/generic/kernel-6.12 target/linux/generic/kernel-6.12
         cp /workdir/rebase/target/linux/generic/config-6.12 target/linux/generic/config-6.12
         for d in backport-6.12 hack-6.12 pending-6.12; do
@@ -80,6 +86,12 @@ jobs:
           cp -r /workdir/rebase/target/linux/generic/$d target/linux/generic/$d
         done
         grep "LINUX_VERSION-6.12" target/linux/generic/kernel-6.12
+        # 2.5) 恢复 fanchmwrt 特有内核补丁（fwx 的 nf_conn.fwx_data 必需；mediatek 特有补丁放 filogic）
+        cp /workdir/fanch-patches/hack/*.patch target/linux/generic/hack-6.12/
+        cp /workdir/fanch-patches/pending/*.patch target/linux/generic/pending-6.12/
+        cp /workdir/fanch-patches/backport/*.patch target/linux/generic/backport-6.12/
+        cp /workdir/fanch-patches/mtk/*.patch target/linux/mediatek/filogic/patches-6.12/
+        echo "恢复后 hack-6.12 含 950-fwx: $(ls target/linux/generic/hack-6.12/950-* 2>/dev/null | wc -l) 个"
         # 3) 复制闭源驱动编译包
         rm -rf package/mtk
         cp -r /workdir/rebase/package/mtk package/mtk
@@ -90,7 +102,7 @@ jobs:
         rm -rf package/network/utils/iwinfo-ucode
         cp -r /workdir/rebase/package/network/utils/iwinfo-ucode package/network/utils/iwinfo-ucode
         # 5) 核对
-        echo "mediatek patches: $(ls target/linux/mediatek/patches-6.12 | wc -l)"
+        echo "mediatek patches: $(ls target/linux/mediatek/patches-6.12 | wc -l) + filogic: $(ls target/linux/mediatek/filogic/patches-6.12 | wc -l)"
         echo "generic backport: $(ls target/linux/generic/backport-6.12 | wc -l) hack: $(ls target/linux/generic/hack-6.12 | wc -l) pending: $(ls target/linux/generic/pending-6.12 | wc -l)"
         echo "mtk package: $(ls package/mtk)"
         echo "hnat pkg: $(grep -c 'define KernelPackage/mediatek_hnat' package/kernel/linux/modules/netdevices.mk)"
