@@ -88,9 +88,17 @@ jobs:
         # 4) 复制闭源驱动编译包
         rm -rf package/mtk
         cp -r /workdir/rebase/package/mtk package/mtk
-        # 5) 核对
+        # 5) 补齐缺失的依赖包定义（官方树没有，闭源驱动必需）
+        #    kmod-mediatek_hnat 内核模块定义在 netdevices.mk（rebase 为官方超集，可整体替换）
+        cp /workdir/rebase/package/kernel/linux/modules/netdevices.mk package/kernel/linux/modules/netdevices.mk
+        #    iwinfo-ucode / ucode-mod-iwinfo（mtwifi-cfg 依赖，官方树无此包）
+        rm -rf package/network/utils/iwinfo-ucode
+        cp -r /workdir/rebase/package/network/utils/iwinfo-ucode package/network/utils/iwinfo-ucode
+        # 6) 核对
         echo "mediatek patches: $(ls target/linux/mediatek/patches-6.12 | wc -l)"
         echo "mtk package: $(ls package/mtk)"
+        echo "hnat pkg: $(grep -c 'define KernelPackage/mediatek_hnat' package/kernel/linux/modules/netdevices.mk)"
+        echo "iwinfo-ucode: $(ls package/network/utils/iwinfo-ucode)"
         grep -n "xiaomi_mi-router-ax3000t" target/linux/mediatek/image/filogic.mk | head -3
         grep -n "kmod-mt_wifi" target/linux/mediatek/image/filogic.mk | head -3
 
