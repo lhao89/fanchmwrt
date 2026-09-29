@@ -256,7 +256,21 @@ jobs:
       run: |
         set -o pipefail
         cd $GITHUB_WORKSPACE
-        # make world 全量编译（tools/toolchain/内核/kmod/包 全在其中，fwx 失败时内核已就绪）
+        # 阶段1：先单独构建工具链（避免 make world 并行时 libgcc_s.so 未生成导致竞态失败）
+        echo "== 构建 host 工具 =="
+        make tools/compile -j$(nproc) 2>&1 | tee tools.log | tail -3
+        echo "== 构建交叉工具链 =="
+        make toolchain/compile -j$(nproc) 2>&1 | tee toolchain.log | tail -3
+        echo "== 检查 libgcc_s.so =="
+        ls -la staging_dir/toolchain-*/lib/libgcc_s.so* 2>&1 || {
+          echo "libgcc_s.so 缺失！toolchain lib 目录内容："
+          ls staging_dir/toolchain-*/lib/ 2>&1 | head -20
+          echo "toolchain.log 尾部："
+          tail -60 toolchain.log
+          exit 1
+        }
+        echo "libgcc_s.so OK"
+        # 阶段2：make world 全量编译
         make -j$(nproc) 2>&1 | tee build.log || {
           set +e
           echo "== make world 失败 =="
@@ -264,10 +278,12 @@ jobs:
           tail -60 build.log
           echo "--- fwx 上下文 ---"
           grep -n -B3 -A3 "fwx" build.log | tail -50
-          echo "== 单独重编 fwx V=s（内核已就绪，拿真实错误） =="
+          echo "== 单独重编 fwx V=s（依赖已就绪，拿真实错误） =="
           make package/fcm/fwx/compile V=s -j1 2>&1 | tee fwx-rebuild.log | tail -250
           echo "--- fwx-rebuild.log 错误行 ---"
           grep -n -E "error:|Error|undefined|No such|failed|\.c:" fwx-rebuild.log | tail -50
+          echo "--- libgcc 相关 ---"
+          grep -n -B3 -A3 "libgcc" build.log | tail -40
           exit 1
         }
         echo "== 编译完成 =="
