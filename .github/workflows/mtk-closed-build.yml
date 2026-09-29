@@ -91,6 +91,9 @@ jobs:
         cp /workdir/fanch-patches/pending/*.patch target/linux/generic/pending-6.12/
         cp /workdir/fanch-patches/backport/*.patch target/linux/generic/backport-6.12/
         cp /workdir/fanch-patches/mtk/*.patch target/linux/mediatek/patches-6.12/
+        # 2.6) 修正 fanchmwrt 200-01 补丁：删除 hci_event.c hunk（immortalwrt 6.12.108 该文件上下文不匹配，已由诊断证实 Hunk FAILED at 42；jiffies.h 全局宏保留，fwx/按键驱动依赖）
+        sed -i '/^--- a\/net\/bluetooth\/hci_event.c$/,$d' target/linux/generic/backport-6.12/200-01-v6.13-jiffies-Define-secs_to_jiffies.patch
+        echo "200-01 修正后剩余目标文件数（应为 1）: $(grep -c '^--- a/' target/linux/generic/backport-6.12/200-01-v6.13-jiffies-Define-secs_to_jiffies.patch)"
         echo "恢复后 hack-6.12 含 950-fwx: $(ls target/linux/generic/hack-6.12/950-* 2>/dev/null | wc -l) 个, mediatek/patches-6.12: $(ls target/linux/mediatek/patches-6.12 | wc -l) 个"
         # 3) 复制闭源驱动编译包
         rm -rf package/mtk
@@ -269,15 +272,15 @@ jobs:
           KD=$(ls -d build_dir/toolchain-*/linux-6.12.* 2>/dev/null | head -1)
           if [ -n "$KD" ]; then
             echo "--- $KD/.pc 已应用补丁数 ---"
-            ls "$KD/.pc/" 2>/dev/null | head -5
+            ls "$KD/.pc/" 2>/dev/null | head -5 || true
             echo "--- jiffies.h 515-545 行 ---"
-            sed -n '515,545p' "$KD/include/linux/jiffies.h" 2>/dev/null
-            echo "--- 200-01 补丁第一个 hunk ---"
-            grep -A14 "^--- a/include/linux/jiffies.h" "$KD/patches/200-01-v6.13-jiffies-Define-secs_to_jiffies.patch" 2>/dev/null | head -20
-            echo "--- hci_event.c 40-50 行 ---"
-            sed -n '40,50p' "$KD/net/bluetooth/hci_event.c" 2>/dev/null
-            echo "--- quilt 系列应用失败详情：尝试 quilt push -v ---"
-            cd "$KD" && quilt push -v 2>&1 | tail -30
+            sed -n '515,545p' "$KD/include/linux/jiffies.h" 2>/dev/null || true
+            echo "--- 失败补丁 .rej 文件（失败现场） ---"
+            cat "$KD/net/bluetooth/hci_event.c.rej" 2>/dev/null | head -30 || true
+            echo "--- hci_event.c 38-48 行 ---"
+            sed -n '38,48p' "$KD/net/bluetooth/hci_event.c" 2>/dev/null || true
+            echo "--- quilt 系列应用失败详情 ---"
+            cd "$KD" && quilt push -v 2>&1 | tail -30 || true
           fi
           exit 1
         }
