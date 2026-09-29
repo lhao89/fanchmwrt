@@ -247,9 +247,8 @@ jobs:
         # CONFIG_PACKAGE_luci-app-fwx-firewall is not set
         # CONFIG_PACKAGE_luci-app-fwx-wireless is not set
         # CONFIG_PACKAGE_luci-app-fwx-traffic-stat is not set
-        # CONFIG_PACKAGE_luci-theme-fanchmwrt is not set
-        # ===== Argon 主题 =====
-        CONFIG_PACKAGE_luci-theme-argon=y
+        # ===== fanchmwrt 专属主题（用户指定保留） =====
+        # （luci-theme-fanchmwrt 由 fanchmwrt 默认包注入，自动选中）
         EOF
         make defconfig
         echo "== 闭源驱动选中状态 =="
