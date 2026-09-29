@@ -261,9 +261,24 @@ jobs:
         make tools/compile -j$(nproc) 2>&1 | tee tools.log | tail -3 || { echo "== tools 失败 =="; tail -80 tools.log; exit 1; }
         echo "== 单独构建 kernel-headers（V=s 串行，暴露补丁应用问题） =="
         make toolchain/kernel-headers/compile V=s -j1 2>&1 | tee kh.log | tail -10 || {
-          echo "== kernel-headers 失败 =="
-          tail -150 kh.log
-          grep -n -E "error|Error|fatal|No such|failed|quilt" kh.log | tail -60
+          echo "== kernel-headers 失败，深度诊断 =="
+          echo "--- kh.log 补丁失败上下文 ---"
+          grep -n -B2 -A6 "Patch failed\|Failed to apply\|patch failed" kh.log | tail -60
+          echo "--- 内核源码目录 ---"
+          ls -d build_dir/toolchain-*/linux-6.12.* 2>/dev/null
+          KD=$(ls -d build_dir/toolchain-*/linux-6.12.* 2>/dev/null | head -1)
+          if [ -n "$KD" ]; then
+            echo "--- $KD/.pc 已应用补丁数 ---"
+            ls "$KD/.pc/" 2>/dev/null | head -5
+            echo "--- jiffies.h 515-545 行 ---"
+            sed -n '515,545p' "$KD/include/linux/jiffies.h" 2>/dev/null
+            echo "--- 200-01 补丁第一个 hunk ---"
+            grep -A14 "^--- a/include/linux/jiffies.h" "$KD/patches/200-01-v6.13-jiffies-Define-secs_to_jiffies.patch" 2>/dev/null | head -20
+            echo "--- hci_event.c 40-50 行 ---"
+            sed -n '40,50p' "$KD/net/bluetooth/hci_event.c" 2>/dev/null
+            echo "--- quilt 系列应用失败详情：尝试 quilt push -v ---"
+            cd "$KD" && quilt push -v 2>&1 | tail -30
+          fi
           exit 1
         }
         echo "== kernel-headers OK，构建其余工具链 =="
