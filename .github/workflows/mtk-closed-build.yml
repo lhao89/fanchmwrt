@@ -251,17 +251,23 @@ jobs:
       run: |
         set -o pipefail
         cd $GITHUB_WORKSPACE
-        # BUILD_LOG=1 让每个包的编译日志落盘到 logs/，失败时能拿到包级详细错误（并行日志会吞掉）
+        # 阶段1：先构建 host 工具链 + 目标工具链（避免单独编包时 host 工具缺失）
+        make tools/compile -j$(nproc) 2>&1 | tee tools.log | tail -5
+        make toolchain/compile -j$(nproc) 2>&1 | tee toolchain.log | tail -5
+        # 阶段2：单独编译 fwx（V=s 直接暴露真实错误，避免 make world 并行吞日志）
+        echo "== 单独编译 fwx V=s =="
+        make package/fcm/fwx/compile V=s -j1 2>&1 | tee fwx-standalone.log | tail -200
+        echo "== fwx 单独编译退出码: ${PIPESTATUS[0]} =="
+        echo "--- fwx-standalone.log 中错误行 ---"
+        grep -n -E "error|Error|undefined|No such|failed|\.c:" fwx-standalone.log | tail -40
+        # 阶段3：完整编译（fwx 若已成功则跳过）
         make -j$(nproc) BUILD_LOG=1 2>&1 | tee build.log || {
-          echo "== 1. fwx 日志目录内容 =="
-          ls -la logs/packages/fcm/fwx/ 2>&1
-          for f in logs/packages/fcm/fwx/*; do echo "-- $f --"; tail -150 "$f"; done
-          echo "== 2. 依赖选中状态 =="
-          grep -E "CONFIG_PACKAGE_kmod-ipt-conntrack|CONFIG_PACKAGE_kmod-nf-conntrack|CONFIG_PACKAGE_kmod-fwx|CONFIG_PACKAGE_fwxd" .config
-          echo "== 3. fwx 重编（-j1 V=s，此时依赖全就绪，拿真实错误） =="
-          make package/fcm/fwx/compile V=s -j1 2>&1 | tail -200
-          echo "== 4. build.log 中 fwx 上下文 =="
-          grep -n -A3 -B3 "fwx" build.log | tail -40
+          set +e
+          echo "== 失败诊断 =="
+          echo "--- build.log 尾部 ---"
+          tail -80 build.log
+          echo "--- fwx 相关 ---"
+          grep -n -B2 -A2 "fwx" build.log | tail -40
           exit 1
         }
         echo "== 编译完成 =="
