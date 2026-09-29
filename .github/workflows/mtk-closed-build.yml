@@ -64,41 +64,34 @@ jobs:
         echo "rebase patches: $(ls /workdir/rebase/target/linux/mediatek/patches-6.12 | wc -l)"
         echo "rebase package/mtk: $(ls /workdir/rebase/package/mtk | wc -l)"
 
-    - name: 移植闭源驱动（整体替换 mediatek 平台层 + 复制 package/mtk）
+    - name: 移植闭源驱动（对齐 rebase 内核补丁体系 + 复制 package/mtk）
       run: |
         set -e
         cd $GITHUB_WORKSPACE
-        # 1) 备份 fanchmwrt 独有文件（官方树定制，不能被覆盖丢失）
-        mkdir -p /tmp/keep/dts /tmp/keep/patches
-        for f in \
-          target/linux/mediatek/dts/mt7981b-h3c-magic-nx30-pro-stock.dts \
-          target/linux/mediatek/dts/mt7981b-huasifei-wh3000.dts \
-          target/linux/mediatek/dts/mt7981b-jcg-q30-pro-stock.dts ; do
-          [ -f "$f" ] && cp "$f" /tmp/keep/dts/
-        done
-        cp target/linux/mediatek/patches-6.12/340-mtd-spinand-*.patch /tmp/keep/patches/ 2>/dev/null || true
-        cp target/linux/mediatek/patches-6.12/601-PCI-mediatek-*.patch /tmp/keep/patches/ 2>/dev/null || true
-        echo "backup files: $(ls /tmp/keep/dts /tmp/keep/patches)"
-        # 2) 整体替换 mediatek 平台层（补丁/files/dts/config/镜像定义全部来自闭源源树）
+        # 1) 整体替换 mediatek 平台层（补丁/files/dts/config/镜像定义全部来自闭源源树）
         rm -rf target/linux/mediatek
         cp -r /workdir/rebase/target/linux/mediatek target/linux/mediatek
-        # 3) 恢复 fanchmwrt 独有文件
-        cp /tmp/keep/dts/* target/linux/mediatek/dts/ 2>/dev/null || true
-        cp /tmp/keep/patches/* target/linux/mediatek/patches-6.12/ 2>/dev/null || true
-        # 4) 复制闭源驱动编译包
+        # 2) 对齐 generic 内核层到 rebase（版本 6.12.108 + 配套补丁/内核配置，闭源补丁以 .108 为基线）
+        #    内核版本定义 + 内核 Kconfig
+        cp /workdir/rebase/target/linux/generic/kernel-6.12 target/linux/generic/kernel-6.12
+        cp /workdir/rebase/target/linux/generic/config-6.12 target/linux/generic/config-6.12
+        for d in backport-6.12 hack-6.12 pending-6.12; do
+          rm -rf target/linux/generic/$d
+          cp -r /workdir/rebase/target/linux/generic/$d target/linux/generic/$d
+        done
+        grep "LINUX_VERSION-6.12" target/linux/generic/kernel-6.12
+        # 3) 复制闭源驱动编译包
         rm -rf package/mtk
         cp -r /workdir/rebase/package/mtk package/mtk
-        # 5) 补齐缺失的依赖包定义（官方树没有，闭源驱动必需）
+        # 4) 补齐缺失的依赖包定义（官方树没有，闭源驱动必需）
         #    kmod-mediatek_hnat 内核模块定义在 netdevices.mk（rebase 为官方超集，可整体替换）
         cp /workdir/rebase/package/kernel/linux/modules/netdevices.mk package/kernel/linux/modules/netdevices.mk
         #    iwinfo-ucode / ucode-mod-iwinfo（mtwifi-cfg 依赖，官方树无此包）
         rm -rf package/network/utils/iwinfo-ucode
         cp -r /workdir/rebase/package/network/utils/iwinfo-ucode package/network/utils/iwinfo-ucode
-        # 7) 移除与官方内核 6.12.87 基线冲突的 rebase 私有 SPI-NAND 厂商补丁（gsto/dosilicon，依赖更新的内核源码）
-        rm -f target/linux/mediatek/patches-6.12/341-mtd-spinand-Support-dosilicon.patch
-        rm -f target/linux/mediatek/patches-6.12/343-mtd-spinand-gsto-Add-code.patch
-        # 6) 核对
+        # 5) 核对
         echo "mediatek patches: $(ls target/linux/mediatek/patches-6.12 | wc -l)"
+        echo "generic backport: $(ls target/linux/generic/backport-6.12 | wc -l) hack: $(ls target/linux/generic/hack-6.12 | wc -l) pending: $(ls target/linux/generic/pending-6.12 | wc -l)"
         echo "mtk package: $(ls package/mtk)"
         echo "hnat pkg: $(grep -c 'define KernelPackage/mediatek_hnat' package/kernel/linux/modules/netdevices.mk)"
         echo "iwinfo-ucode: $(ls package/network/utils/iwinfo-ucode)"
