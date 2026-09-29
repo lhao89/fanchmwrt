@@ -253,13 +253,15 @@ jobs:
         cd $GITHUB_WORKSPACE
         # BUILD_LOG=1 让每个包的编译日志落盘到 logs/，失败时能拿到包级详细错误（并行日志会吞掉）
         make -j$(nproc) BUILD_LOG=1 2>&1 | tee build.log || {
-          echo "== 编译失败，fwx 包详细日志 =="
-          cat logs/packages/fcm/fwx/compile.txt 2>/dev/null | tail -150
-          echo "== fwxd/libfwx_common 日志（若存在） =="
-          cat logs/packages/fcm/fwxd/compile.txt 2>/dev/null | tail -80
-          cat logs/packages/fcm/libfwx_common/compile.txt 2>/dev/null | tail -80
-          echo "== build.log 尾部 =="
-          tail -120 build.log
+          echo "== 1. fwx 日志目录内容 =="
+          ls -la logs/packages/fcm/fwx/ 2>&1
+          for f in logs/packages/fcm/fwx/*; do echo "-- $f --"; tail -150 "$f"; done
+          echo "== 2. 依赖选中状态 =="
+          grep -E "CONFIG_PACKAGE_kmod-ipt-conntrack|CONFIG_PACKAGE_kmod-nf-conntrack|CONFIG_PACKAGE_kmod-fwx|CONFIG_PACKAGE_fwxd" .config
+          echo "== 3. fwx 重编（-j1 V=s，此时依赖全就绪，拿真实错误） =="
+          make package/fcm/fwx/compile V=s -j1 2>&1 | tail -200
+          echo "== 4. build.log 中 fwx 上下文 =="
+          grep -n -A3 -B3 "fwx" build.log | tail -40
           exit 1
         }
         echo "== 编译完成 =="
