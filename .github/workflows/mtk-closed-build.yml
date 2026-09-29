@@ -86,12 +86,12 @@ jobs:
           cp -r /workdir/rebase/target/linux/generic/$d target/linux/generic/$d
         done
         grep "LINUX_VERSION-6.12" target/linux/generic/kernel-6.12
-        # 2.5) 恢复 fanchmwrt 特有内核补丁（fwx 的 nf_conn.fwx_data 必需；mediatek 特有补丁放 filogic）
+        # 2.5) 恢复 fanchmwrt 特有内核补丁（fwx 的 nf_conn.fwx_data 必需；mediatek 特有补丁放顶层 patches-6.12）
         cp /workdir/fanch-patches/hack/*.patch target/linux/generic/hack-6.12/
         cp /workdir/fanch-patches/pending/*.patch target/linux/generic/pending-6.12/
         cp /workdir/fanch-patches/backport/*.patch target/linux/generic/backport-6.12/
-        cp /workdir/fanch-patches/mtk/*.patch target/linux/mediatek/filogic/patches-6.12/
-        echo "恢复后 hack-6.12 含 950-fwx: $(ls target/linux/generic/hack-6.12/950-* 2>/dev/null | wc -l) 个"
+        cp /workdir/fanch-patches/mtk/*.patch target/linux/mediatek/patches-6.12/
+        echo "恢复后 hack-6.12 含 950-fwx: $(ls target/linux/generic/hack-6.12/950-* 2>/dev/null | wc -l) 个, mediatek/patches-6.12: $(ls target/linux/mediatek/patches-6.12 | wc -l) 个"
         # 3) 复制闭源驱动编译包
         rm -rf package/mtk
         cp -r /workdir/rebase/package/mtk package/mtk
@@ -102,7 +102,7 @@ jobs:
         rm -rf package/network/utils/iwinfo-ucode
         cp -r /workdir/rebase/package/network/utils/iwinfo-ucode package/network/utils/iwinfo-ucode
         # 5) 核对
-        echo "mediatek patches: $(ls target/linux/mediatek/patches-6.12 | wc -l) + filogic: $(ls target/linux/mediatek/filogic/patches-6.12 | wc -l)"
+        echo "mediatek/patches-6.12: $(ls target/linux/mediatek/patches-6.12 | wc -l) 个补丁"
         echo "generic backport: $(ls target/linux/generic/backport-6.12 | wc -l) hack: $(ls target/linux/generic/hack-6.12 | wc -l) pending: $(ls target/linux/generic/pending-6.12 | wc -l)"
         echo "mtk package: $(ls package/mtk)"
         echo "hnat pkg: $(grep -c 'define KernelPackage/mediatek_hnat' package/kernel/linux/modules/netdevices.mk)"
