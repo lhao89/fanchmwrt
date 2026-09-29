@@ -97,6 +97,10 @@ jobs:
         rm -f target/linux/generic/backport-6.12/429-01-v6.18-mtd-spinand-fix-direct-mapping-creation-sizes.patch
         rm -f target/linux/generic/backport-6.12/429-02-v6.18-mtd-spinand-try-a-regular-dirmap-if-creating-a-di.patch
         rm -f target/linux/generic/backport-6.12/429-03-v6.18-mtd-spinand-repeat-reading-in-regular-mode-if-con.patch
+        # 620/621/625（v6.15/v6.17/v7.0 ppp 改进）与 rebase 自带 622/623/624（v6.18 ppp rwlock 现代化）同类重叠，且 620 已在 l2tp_ppp.c 撞上下文（Hunk FAILED at 796）；rebase 的 ppp 补丁体系功能完整，跳过
+        rm -f target/linux/generic/backport-6.12/620-v6.15-ppp-use-IFF_NO_QUEUE-in-virtual-interfaces.patch
+        rm -f target/linux/generic/backport-6.12/621-v6.17-ppp-convert-to-percpu-netstats.patch
+        rm -f target/linux/generic/backport-6.12/625-v7.0-ppp-enable-TX-scatter-gather.patch
         echo "排除重复补丁后 backport 计数: $(ls target/linux/generic/backport-6.12 | wc -l)"
         cp /workdir/fanch-patches/mtk/*.patch target/linux/mediatek/patches-6.12/
         # 2.6) 修正 fanchmwrt 200-01 补丁：删除 hci_event.c hunk（immortalwrt 6.12.108 该文件上下文不匹配，已由诊断证实 Hunk FAILED at 42；jiffies.h 全局宏保留，fwx/按键驱动依赖）
