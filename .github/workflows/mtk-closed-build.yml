@@ -1,0 +1,157 @@
+name: mtk-closed-build
+
+on:
+  workflow_dispatch:
+    inputs:
+      BUILD_DATE:
+        description: '固件发布日期，留空则使用当天日期'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  REBASE_TARBALL: https://codeload.github.com/chasey-dev/immortalwrt-mt798x-rebase/tar.gz/refs/heads/25.12
+
+jobs:
+  build:
+    name: AX3000T V1 闭源驱动固件（fanchmwrt 25.12.4）
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: 检查分支
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 1
+
+    - name: 释放磁盘空间
+      run: |
+        sudo rm -rf /etc/apt/sources.list.d
+        sudo swapoff -a
+        sudo rm -f /swapfile /mnt/swapfile
+        sudo docker image prune -a -f
+        sudo systemctl stop docker
+        sudo snap set system refresh.retain=2
+        sudo apt-get -y purge firefox clang* ghc* google* llvm* mono* mongo* mysql* php*
+        sudo apt-get -y autoremove --purge
+        sudo apt-get clean
+        sudo rm -rf /etc/mysql /etc/php /usr/lib/jvm /usr/libexec/docker /usr/local /usr/src/* /var/lib/docker /var/lib/gems /var/lib/mysql /var/lib/snapd /etc/skel /opt/{microsoft,az,hostedtoolcache,cni,mssql-tools,pipx} /usr/share/{az*,dotnet,swift,miniconda,gradle*,java,kotlinc,ri,sbt} /root/{.sbt,.local,.npm}
+        sudo sed -i '/NVM_DIR/d;/skel/d' /root/{.bashrc,.profile}
+        rm -rf ~/{.cargo,.dotnet,.rustup}
+        df -Th
+
+    - name: 编译环境
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y tar build-essential flex bison cmake g++ gawk gcc-multilib g++-multilib gettext git libfuse-dev libncurses5-dev libssl-dev python3 python3-pip python3-ply python3-distutils python3-pyelftools rsync unzip zlib1g-dev file wget subversion patch upx-ucl autoconf automake curl asciidoc binutils bzip2 lib32gcc-s1 libc6-dev-i386 uglifyjs msmtp texinfo libreadline-dev libglib2.0-dev xmlto libelf-dev libtool autopoint antlr3 gperf ccache swig coreutils haveged scons libpython3-dev rename qemu-utils clang llvm
+        sudo apt-get clean
+        git config --global user.name 'GitHub Actions' && git config --global user.email 'noreply@github.com'
+        sudo timedatectl set-timezone 'Asia/Shanghai'
+        sudo mkdir -p /workdir
+        sudo chown $USER:$GROUPS /workdir
+        df -Th
+
+    - name: 下载闭源参考树（immortalwrt-mt798x-rebase 25.12）
+      run: |
+        cd /workdir
+        curl -L -o rebase.tar.gz "${{ env.REBASE_TARBALL }}"
+        tar -xzf rebase.tar.gz
+        mv immortalwrt-mt798x-rebase-25.12 /workdir/rebase
+        echo "rebase patches: $(ls /workdir/rebase/target/linux/mediatek/patches-6.12 | wc -l)"
+        echo "rebase package/mtk: $(ls /workdir/rebase/package/mtk | wc -l)"
+
+    - name: 移植闭源驱动（整体替换 mediatek 平台层 + 复制 package/mtk）
+      run: |
+        set -e
+        cd $GITHUB_WORKSPACE
+        # 1) 备份 fanchmwrt 独有文件（官方树定制，不能被覆盖丢失）
+        mkdir -p /tmp/keep/dts /tmp/keep/patches
+        for f in \
+          target/linux/mediatek/dts/mt7981b-h3c-magic-nx30-pro-stock.dts \
+          target/linux/mediatek/dts/mt7981b-huasifei-wh3000.dts \
+          target/linux/mediatek/dts/mt7981b-jcg-q30-pro-stock.dts ; do
+          [ -f "$f" ] && cp "$f" /tmp/keep/dts/
+        done
+        cp target/linux/mediatek/patches-6.12/340-mtd-spinand-*.patch /tmp/keep/patches/ 2>/dev/null || true
+        cp target/linux/mediatek/patches-6.12/601-PCI-mediatek-*.patch /tmp/keep/patches/ 2>/dev/null || true
+        echo "backup files: $(ls /tmp/keep/dts /tmp/keep/patches)"
+        # 2) 整体替换 mediatek 平台层（补丁/files/dts/config/镜像定义全部来自闭源源树）
+        rm -rf target/linux/mediatek
+        cp -r /workdir/rebase/target/linux/mediatek target/linux/mediatek
+        # 3) 恢复 fanchmwrt 独有文件
+        cp /tmp/keep/dts/* target/linux/mediatek/dts/ 2>/dev/null || true
+        cp /tmp/keep/patches/* target/linux/mediatek/patches-6.12/ 2>/dev/null || true
+        # 4) 复制闭源驱动编译包
+        rm -rf package/mtk
+        cp -r /workdir/rebase/package/mtk package/mtk
+        # 5) 核对
+        echo "mediatek patches: $(ls target/linux/mediatek/patches-6.12 | wc -l)"
+        echo "mtk package: $(ls package/mtk)"
+        grep -n "xiaomi_mi-router-ax3000t" target/linux/mediatek/image/filogic.mk | head -3
+        grep -n "kmod-mt_wifi" target/linux/mediatek/image/filogic.mk | head -3
+
+    - name: 更新 feeds（官方 feeds + fanchmwrt-packages）
+      run: |
+        cd $GITHUB_WORKSPACE
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+
+    - name: 生成配置（AX3000T V1 stock 布局）
+      run: |
+        cd $GITHUB_WORKSPACE
+        cat > .config <<'EOF'
+        CONFIG_TARGET_mediatek=y
+        CONFIG_TARGET_mediatek_filogic=y
+        CONFIG_TARGET_mediatek_filogic_DEVICE_xiaomi_mi-router-ax3000t=y
+        EOF
+        make defconfig
+        echo "== 闭源驱动选中状态 =="
+        grep -E "CONFIG_PACKAGE_kmod-mt_wifi|CONFIG_PACKAGE_kmod-mediatek_hnat|CONFIG_PACKAGE_mtwifi|CONFIG_PACKAGE_luci-app-mtk" .config || echo "WARN: 闭源包未自动选中，需检查设备定义 DEPENDS"
+
+    - name: 下载编译依赖
+      run: |
+        cd $GITHUB_WORKSPACE
+        make download -j8
+        find dl -size -1024c -exec rm -f {} \;
+
+    - name: 内核补丁预检（应用 378+ 个闭源补丁到官方内核 6.12.87）
+      run: |
+        cd $GITHUB_WORKSPACE
+        make target/linux/prepare V=s 2>&1 | tee prepare.log
+        echo "== prepare 完成 =="
+
+    - name: 编译固件
+      run: |
+        cd $GITHUB_WORKSPACE
+        make -j$(nproc) 2>&1 | tee build.log || yes n | make -j1 || yes n | make -j1 V=s
+
+    - name: 查看磁盘
+      if: (!cancelled())
+      run: df -hT
+
+    - name: 整理文件
+      id: organize
+      run: |
+        cd $GITHUB_WORKSPACE/bin/targets/*/*
+        rm -rf packages *.buildinfo profiles.json *.manifest *bl2.bin *kernel.bin *.sha sha256sums
+        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+        ls -la
+
+    - name: 上传固件到 Releases
+      uses: softprops/action-gh-release@v3
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: fanchmwrt-25.12.4-ax3000t-mtkclosed-${{ github.event.inputs.BUILD_DATE }}
+        files: ${{ env.FIRMWARE }}/*
+        body: |
+          ====================固件信息=======================
+          项目：fanchmwrt/fanchmwrt (fanchmwrt-25.12.4 分支)
+          内核：6.12
+          驱动：MTK 闭源驱动（已替换开源 mt76）
+          机型：小米 AX3000T（硬件 V1，stock 布局）
+          默认密码：root/password
