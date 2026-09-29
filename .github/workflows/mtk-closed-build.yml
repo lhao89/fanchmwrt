@@ -94,6 +94,9 @@ jobs:
         #    iwinfo-ucode / ucode-mod-iwinfo（mtwifi-cfg 依赖，官方树无此包）
         rm -rf package/network/utils/iwinfo-ucode
         cp -r /workdir/rebase/package/network/utils/iwinfo-ucode package/network/utils/iwinfo-ucode
+        # 7) 移除与官方内核 6.12.87 基线冲突的 rebase 私有 SPI-NAND 厂商补丁（gsto/dosilicon，依赖更新的内核源码）
+        rm -f target/linux/mediatek/patches-6.12/341-mtd-spinand-Support-dosilicon.patch
+        rm -f target/linux/mediatek/patches-6.12/343-mtd-spinand-gsto-Add-code.patch
         # 6) 核对
         echo "mediatek patches: $(ls target/linux/mediatek/patches-6.12 | wc -l)"
         echo "mtk package: $(ls package/mtk)"
@@ -245,14 +248,18 @@ jobs:
 
     - name: 内核补丁预检（应用 378+ 个闭源补丁到官方内核 6.12.87）
       run: |
+        set -o pipefail
         cd $GITHUB_WORKSPACE
-        make target/linux/prepare V=s 2>&1 | tee prepare.log
+        make target/linux/prepare V=s 2>&1 | tee prepare.log || { echo "== prepare 失败，日志尾部 =="; tail -150 prepare.log; exit 1; }
         echo "== prepare 完成 =="
 
     - name: 编译固件
       run: |
+        set -o pipefail
         cd $GITHUB_WORKSPACE
-        make -j$(nproc) 2>&1 | tee build.log || yes n | make -j1 || yes n | make -j1 V=s
+        make -j$(nproc) 2>&1 | tee build.log || { echo "== 编译失败，日志尾部 =="; tail -200 build.log; exit 1; }
+        echo "== 编译完成 =="
+        ls -lh bin/targets/mediatek/filogic/ | head -20
 
     - name: 查看磁盘
       if: (!cancelled())
