@@ -103,6 +103,13 @@ jobs:
         rm -f target/linux/generic/backport-6.12/625-v7.0-ppp-enable-TX-scatter-gather.patch
         echo "排除重复补丁后 backport 计数: $(ls target/linux/generic/backport-6.12 | wc -l)"
         cp /workdir/fanch-patches/mtk/*.patch target/linux/mediatek/patches-6.12/
+        # 2.7) 修正 340 补丁 Makefile hunk：immortalwrt 6.12.108 的 spinand-objs 行与官方 OpenWrt 组织不同（无 etron.o、macronix.o 在第一行），且 rebase 401-01 已把 fmsh.o 加入该行（Run #21 已证实 Hunk FAILED at 1）；按实际上下文改写
+        sed -i \
+          -e 's/^-spinand-objs := core.o alliancememory.o ato.o esmt.o etron.o fmsh.o foresee.o gigadevice.o$/-spinand-objs := core.o alliancememory.o ato.o esmt.o fmsh.o foresee.o gigadevice.o macronix.o/' \
+          -e 's/^+spinand-objs := core.o alliancememory.o ato.o esmt.o etron.o fidelix.o fmsh.o foresee.o gigadevice.o$/+spinand-objs := core.o alliancememory.o ato.o esmt.o fidelix.o fmsh.o foresee.o gigadevice.o macronix.o/' \
+          target/linux/mediatek/patches-6.12/340-mtd-spinand-Add-support-for-the-Fidelix-FM35X1GA.patch
+        echo "340 修正后 Makefile hunk:"
+        grep -A3 "spinand/Makefile" target/linux/mediatek/patches-6.12/340-mtd-spinand-Add-support-for-the-Fidelix-FM35X1GA.patch
         # 2.6) 修正 fanchmwrt 200-01 补丁：删除 hci_event.c hunk（immortalwrt 6.12.108 该文件上下文不匹配，已由诊断证实 Hunk FAILED at 42；jiffies.h 全局宏保留，fwx/按键驱动依赖）
         sed -i '/^--- a\/net\/bluetooth\/hci_event.c$/,$d' target/linux/generic/backport-6.12/200-01-v6.13-jiffies-Define-secs_to_jiffies.patch
         echo "200-01 修正后剩余目标文件数（应为 1）: $(grep -c '^--- a/' target/linux/generic/backport-6.12/200-01-v6.13-jiffies-Define-secs_to_jiffies.patch)"
