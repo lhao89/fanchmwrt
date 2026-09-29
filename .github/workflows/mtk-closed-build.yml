@@ -240,34 +240,22 @@ jobs:
         make download -j8
         find dl -size -1024c -exec rm -f {} \;
 
-    - name: 内核补丁预检（应用 378+ 个闭源补丁到内核 6.12.108）
-      run: |
-        set -o pipefail
-        cd $GITHUB_WORKSPACE
-        make target/linux/prepare V=s 2>&1 | tee prepare.log || { echo "== prepare 失败，日志尾部 =="; tail -150 prepare.log; exit 1; }
-        echo "== prepare 完成 =="
-
     - name: 编译固件
       run: |
         set -o pipefail
         cd $GITHUB_WORKSPACE
-        # 阶段1：先构建 host 工具链 + 目标工具链（避免单独编包时 host 工具缺失）
-        make tools/compile -j$(nproc) 2>&1 | tee tools.log | tail -5
-        make toolchain/compile -j$(nproc) 2>&1 | tee toolchain.log | tail -5
-        # 阶段2：单独编译 fwx（V=s 直接暴露真实错误，避免 make world 并行吞日志）
-        echo "== 单独编译 fwx V=s =="
-        make package/fcm/fwx/compile V=s -j1 2>&1 | tee fwx-standalone.log | tail -200
-        echo "== fwx 单独编译退出码: ${PIPESTATUS[0]} =="
-        echo "--- fwx-standalone.log 中错误行 ---"
-        grep -n -E "error|Error|undefined|No such|failed|\.c:" fwx-standalone.log | tail -40
-        # 阶段3：完整编译（fwx 若已成功则跳过）
-        make -j$(nproc) BUILD_LOG=1 2>&1 | tee build.log || {
+        # make world 全量编译（tools/toolchain/内核/kmod/包 全在其中，fwx 失败时内核已就绪）
+        make -j$(nproc) 2>&1 | tee build.log || {
           set +e
-          echo "== 失败诊断 =="
+          echo "== make world 失败 =="
           echo "--- build.log 尾部 ---"
-          tail -80 build.log
-          echo "--- fwx 相关 ---"
-          grep -n -B2 -A2 "fwx" build.log | tail -40
+          tail -60 build.log
+          echo "--- fwx 上下文 ---"
+          grep -n -B3 -A3 "fwx" build.log | tail -50
+          echo "== 单独重编 fwx V=s（内核已就绪，拿真实错误） =="
+          make package/fcm/fwx/compile V=s -j1 2>&1 | tee fwx-rebuild.log | tail -250
+          echo "--- fwx-rebuild.log 错误行 ---"
+          grep -n -E "error:|Error|undefined|No such|failed|\.c:" fwx-rebuild.log | tail -50
           exit 1
         }
         echo "== 编译完成 =="
