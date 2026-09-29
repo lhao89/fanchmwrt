@@ -316,13 +316,13 @@ jobs:
           set +e
           echo "== make world 失败 =="
           echo "--- build.log 尾部 ---"
-          tail -60 build.log
-          echo "--- fwx 上下文 ---"
-          grep -n -B3 -A3 "fwx" build.log | tail -50
-          echo "== 单独重编 fwx V=s（依赖已就绪，拿真实错误） =="
-          make package/fcm/fwx/compile V=s -j1 2>&1 | tee fwx-rebuild.log | tail -250
-          echo "--- fwx-rebuild.log 错误行 ---"
-          grep -n -E "error:|Error|undefined|No such|failed|\.c:" fwx-rebuild.log | tail -50
+          tail -80 build.log
+          echo "--- target/linux 相关错误 ---"
+          grep -n -E "target/linux|Error [0-9]|error:|failed" build.log | tail -40
+          echo "== 单独重编 target/linux V=s（依赖已就绪，拿真实错误） =="
+          make target/linux/compile V=s -j1 2>&1 | tee linux-rebuild.log | tail -300
+          echo "--- linux-rebuild.log 错误行 ---"
+          grep -n -E "error:|Error [0-9]|undefined|No such|failed|\.c:|\.dts" linux-rebuild.log | tail -60
           echo "--- libgcc 相关 ---"
           grep -n -B3 -A3 "libgcc" build.log | tail -40
           exit 1
