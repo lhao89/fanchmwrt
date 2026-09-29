@@ -90,6 +90,10 @@ jobs:
         cp /workdir/fanch-patches/hack/*.patch target/linux/generic/hack-6.12/
         cp /workdir/fanch-patches/pending/*.patch target/linux/generic/pending-6.12/
         cp /workdir/fanch-patches/backport/*.patch target/linux/generic/backport-6.12/
+        # 排除与 rebase 重复的补丁：复旦微 FM25S01A 支持 rebase 已有 401-01/401-02（v6.18），fanchmwrt 401(v6.17)/404(v6.19) 功能重复且会撞上下文
+        rm -f target/linux/generic/backport-6.12/401-v6.17-mtd-spinand-add-support-for-FudanMicro-FM25S01A.patch
+        rm -f target/linux/generic/backport-6.12/404-v6.19-mtd-spinand-fmsh-remove-QE-bit-for-FM25S01A-flash.patch
+        echo "排除重复复旦微补丁后 backport 计数: $(ls target/linux/generic/backport-6.12 | wc -l)"
         cp /workdir/fanch-patches/mtk/*.patch target/linux/mediatek/patches-6.12/
         # 2.6) 修正 fanchmwrt 200-01 补丁：删除 hci_event.c hunk（immortalwrt 6.12.108 该文件上下文不匹配，已由诊断证实 Hunk FAILED at 42；jiffies.h 全局宏保留，fwx/按键驱动依赖）
         sed -i '/^--- a\/net\/bluetooth\/hci_event.c$/,$d' target/linux/generic/backport-6.12/200-01-v6.13-jiffies-Define-secs_to_jiffies.patch
