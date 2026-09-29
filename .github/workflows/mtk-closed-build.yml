@@ -103,11 +103,19 @@ jobs:
         rm -f target/linux/generic/backport-6.12/625-v7.0-ppp-enable-TX-scatter-gather.patch
         echo "排除重复补丁后 backport 计数: $(ls target/linux/generic/backport-6.12 | wc -l)"
         cp /workdir/fanch-patches/mtk/*.patch target/linux/mediatek/patches-6.12/
-        # 2.7) 修正 340 补丁 Makefile hunk：immortalwrt 6.12.108 的 spinand-objs 行与官方 OpenWrt 组织不同（无 etron.o、macronix.o 在第一行），且 rebase 401-01 已把 fmsh.o 加入该行（Run #21 已证实 Hunk FAILED at 1）；按实际上下文改写
-        sed -i \
-          -e 's/^-spinand-objs := core.o alliancememory.o ato.o esmt.o etron.o fmsh.o foresee.o gigadevice.o$/-spinand-objs := core.o alliancememory.o ato.o esmt.o fmsh.o foresee.o gigadevice.o macronix.o/' \
-          -e 's/^+spinand-objs := core.o alliancememory.o ato.o esmt.o etron.o fidelix.o fmsh.o foresee.o gigadevice.o$/+spinand-objs := core.o alliancememory.o ato.o esmt.o fidelix.o fmsh.o foresee.o gigadevice.o macronix.o/' \
-          target/linux/mediatek/patches-6.12/340-mtd-spinand-Add-support-for-the-Fidelix-FM35X1GA.patch
+        # 2.7) 修正 340 补丁 Makefile hunk：immortalwrt 6.12.108 的 spinand 行组织与官方 OpenWrt 不同（第一行无 etron.o、含 macronix.o；第二行无 macronix.o），且 rebase 401-01 已把 fmsh.o 加入第一行（Run #21/#23 已证实 Hunk FAILED at 1）；按实际上下文三行精确改写
+        python3 - <<'PYEOF'
+p = 'target/linux/mediatek/patches-6.12/340-mtd-spinand-Add-support-for-the-Fidelix-FM35X1GA.patch'
+s = open(p, encoding='utf-8').read()
+s = s.replace('-spinand-objs := core.o alliancememory.o ato.o esmt.o etron.o fmsh.o foresee.o gigadevice.o',
+              '-spinand-objs := core.o alliancememory.o ato.o esmt.o fmsh.o foresee.o gigadevice.o macronix.o')
+s = s.replace('+spinand-objs := core.o alliancememory.o ato.o esmt.o etron.o fidelix.o fmsh.o foresee.o gigadevice.o',
+              '+spinand-objs := core.o alliancememory.o ato.o esmt.o fidelix.o fmsh.o foresee.o gigadevice.o macronix.o')
+s = s.replace(' spinand-objs += macronix.o micron.o paragon.o toshiba.o winbond.o xtx.o',
+              ' spinand-objs += micron.o paragon.o toshiba.o winbond.o xtx.o')
+open(p, 'w', encoding='utf-8').write(s)
+print('340 Makefile hunk 修正完成')
+PYEOF
         echo "340 修正后 Makefile hunk:"
         grep -A4 "nand/spi/Makefile" target/linux/mediatek/patches-6.12/340-mtd-spinand-Add-support-for-the-Fidelix-FM35X1GA.patch || true
         # 2.6) 修正 fanchmwrt 200-01 补丁：删除 hci_event.c hunk（immortalwrt 6.12.108 该文件上下文不匹配，已由诊断证实 Hunk FAILED at 42；jiffies.h 全局宏保留，fwx/按键驱动依赖）
