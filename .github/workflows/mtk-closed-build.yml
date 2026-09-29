@@ -258,9 +258,20 @@ jobs:
         cd $GITHUB_WORKSPACE
         # 阶段1：先单独构建工具链（避免 make world 并行时 libgcc_s.so 未生成导致竞态失败）
         echo "== 构建 host 工具 =="
-        make tools/compile -j$(nproc) 2>&1 | tee tools.log | tail -3
-        echo "== 构建交叉工具链 =="
-        make toolchain/compile -j$(nproc) 2>&1 | tee toolchain.log | tail -3
+        make tools/compile -j$(nproc) 2>&1 | tee tools.log | tail -3 || { echo "== tools 失败 =="; tail -80 tools.log; exit 1; }
+        echo "== 单独构建 kernel-headers（V=s 串行，暴露补丁应用问题） =="
+        make toolchain/kernel-headers/compile V=s -j1 2>&1 | tee kh.log | tail -10 || {
+          echo "== kernel-headers 失败 =="
+          tail -150 kh.log
+          grep -n -E "error|Error|fatal|No such|failed|quilt" kh.log | tail -60
+          exit 1
+        }
+        echo "== kernel-headers OK，构建其余工具链 =="
+        make toolchain/compile -j$(nproc) 2>&1 | tee toolchain.log | tail -3 || {
+          echo "== toolchain 失败诊断 =="
+          tail -80 toolchain.log
+          exit 1
+        }
         echo "== 检查 libgcc_s.so =="
         ls -la staging_dir/toolchain-*/lib/libgcc_s.so* 2>&1 || {
           echo "libgcc_s.so 缺失！toolchain lib 目录内容："
