@@ -226,8 +226,30 @@ jobs:
         # CONFIG_MTK_PCIE_ASPM_DYM_CTRL_SUPPORT is not set
         # CONFIG_MTK_PRE_CAL_TRX_SET1_SUPPORT is not set
         # CONFIG_MTK_PRE_CAL_TRX_SET2_SUPPORT is not set
-        # CONFIG_MTK_RLM_CAL_CACHE_SUPPORT is not set
-        # CONFIG_MTK_SNIFFER_RADIOTAP_SUPPORT is not set
+        # ===== 排除 fanchmwrt 私有 fwx 上网行为管理全家（新内核 6.12.108 上编译失败且非必需） =====
+        # CONFIG_PACKAGE_fwxd is not set
+        # CONFIG_PACKAGE_kmod-fwx is not set
+        # CONFIG_PACKAGE_libfwx_common is not set
+        # CONFIG_PACKAGE_luci-app-fwx-appfilter is not set
+        # CONFIG_PACKAGE_luci-app-fwx-dashboard is not set
+        # CONFIG_PACKAGE_luci-app-fwx-feature is not set
+        # CONFIG_PACKAGE_luci-app-fwx-macfilter is not set
+        # CONFIG_PACKAGE_luci-app-fwx-network is not set
+        # CONFIG_PACKAGE_luci-app-fwx-record is not set
+        # CONFIG_PACKAGE_luci-app-fwx-resources is not set
+        # CONFIG_PACKAGE_luci-app-fwx-user is not set
+        # CONFIG_PACKAGE_luci-app-fwx-dashboard-setting is not set
+        # CONFIG_PACKAGE_luci-app-fwx-session-stat is not set
+        # CONFIG_PACKAGE_luci-app-fwx-user-record is not set
+        # CONFIG_PACKAGE_luci-app-fwx-system is not set
+        # CONFIG_PACKAGE_luci-app-fwx-mac-blacklist is not set
+        # CONFIG_PACKAGE_luci-app-fwx-record-whitelist is not set
+        # CONFIG_PACKAGE_luci-app-fwx-firewall is not set
+        # CONFIG_PACKAGE_luci-app-fwx-wireless is not set
+        # CONFIG_PACKAGE_luci-app-fwx-traffic-stat is not set
+        # CONFIG_PACKAGE_luci-theme-fanchmwrt is not set
+        # ===== Argon 主题 =====
+        CONFIG_PACKAGE_luci-theme-argon=y
         EOF
         make defconfig
         echo "== 闭源驱动选中状态 =="
