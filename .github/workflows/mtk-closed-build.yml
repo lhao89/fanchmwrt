@@ -251,12 +251,17 @@ jobs:
       run: |
         set -o pipefail
         cd $GITHUB_WORKSPACE
-        # 先单独编译 fwx（并行日志会吞掉具体错误，单独跑一次拿到详细报错）
-        echo "== 单独预编译 fwx（观察内核 API 兼容性） =="
-        make package/fcm/fwx/compile V=s 2>&1 | tee fwx.log || true
-        tail -120 fwx.log
-        echo "== fwx 预编译结束 =="
-        make -j$(nproc) 2>&1 | tee build.log || { echo "== 编译失败，日志尾部 =="; tail -200 build.log; exit 1; }
+        # BUILD_LOG=1 让每个包的编译日志落盘到 logs/，失败时能拿到包级详细错误（并行日志会吞掉）
+        make -j$(nproc) BUILD_LOG=1 2>&1 | tee build.log || {
+          echo "== 编译失败，fwx 包详细日志 =="
+          cat logs/packages/fcm/fwx/compile.txt 2>/dev/null | tail -150
+          echo "== fwxd/libfwx_common 日志（若存在） =="
+          cat logs/packages/fcm/fwxd/compile.txt 2>/dev/null | tail -80
+          cat logs/packages/fcm/libfwx_common/compile.txt 2>/dev/null | tail -80
+          echo "== build.log 尾部 =="
+          tail -120 build.log
+          exit 1
+        }
         echo "== 编译完成 =="
         ls -lh bin/targets/mediatek/filogic/ | head -20
 
