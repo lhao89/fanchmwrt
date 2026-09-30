@@ -328,6 +328,8 @@ jobs:
           grep -n -E "error:|Error [0-9]|undefined|No such|failed|\.c:|\.dts" linux-rebuild.log | tail -60
           echo "--- libgcc 相关 ---"
           grep -n -B3 -A3 "libgcc" build.log | tail -40
+          echo "== 单独重编 warp V=s（拿真实错误） =="
+          make package/mtk/drivers/warp V=s -j1 2>&1 | tail -120
           exit 1
         }
         echo "== 编译完成 =="
