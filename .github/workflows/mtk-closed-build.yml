@@ -328,12 +328,23 @@ jobs:
           grep -n -E "error:|Error [0-9]|undefined|No such|failed|\.c:|\.dts" linux-rebuild.log | tail -60
           echo "--- libgcc 相关 ---"
           grep -n -B3 -A3 "libgcc" build.log | tail -40
-          echo "== 单独重编 warp V=s（删 stamp 强制重编，拿真实错误） =="
-          rm -rf build_dir/target-*/linux-mediatek_filogic/linux-6.12.108/warp 2>/dev/null
-          rm -f build_dir/target-*/linux-mediatek_filogic/stamp/*warp* build_dir/target-*/linux-mediatek_filogic/stamp/.warp* 2>/dev/null
-          echo "--- warp 构建目录内容（重编前） ---"
-          ls -la build_dir/target-*/linux-mediatek_filogic/linux-6.12.108/warp/ 2>/dev/null | head -30
-          make package/mtk/drivers/warp V=s -j1 2>&1 | tail -150
+          echo "== 手动执行 warp M= 编译（跳过 OpenWrt stamp，拿真实错误） =="
+          KDIR=$(ls -d build_dir/target-*/linux-mediatek_filogic/linux-6.12.108 2>/dev/null | head -1)
+          TC=$(ls -d staging_dir/toolchain-aarch64* 2>/dev/null | head -1)
+          echo "KDIR=$KDIR"
+          echo "TC=$TC"
+          ls -la "$KDIR/warp/" 2>/dev/null | head -30
+          if [ -d "$KDIR/warp" ]; then
+            make -C "$KDIR" V=1 ARCH=arm64 CROSS_COMPILE="$TC/bin/aarch64-openwrt-linux-musl-" \
+              M="$KDIR/warp" \
+              CONFIG_WARP_VERSION=2 CONFIG_WARP_DBG_SUPPORT=y CONFIG_WED_HW_RRO_SUPPORT=y \
+              CONFIG_MTK_MEMORY_SHRINK=y CONFIG_WARP_CHIPSET="mt7981" \
+              CONFIG_SUPPORT_OPENWRT=y \
+              modules 2>&1 | tail -120
+          else
+            echo "warp 源码目录不存在！检查 dl 与解压"
+            ls -la dl/ 2>/dev/null | grep -i warp
+          fi
           exit 1
         }
         echo "== 编译完成 =="
