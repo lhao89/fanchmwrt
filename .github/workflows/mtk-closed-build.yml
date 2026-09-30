@@ -328,6 +328,13 @@ jobs:
           grep -n -E "error:|Error [0-9]|undefined|No such|failed|\.c:|\.dts" linux-rebuild.log | tail -60
           echo "--- libgcc 相关 ---"
           grep -n -B3 -A3 "libgcc" build.log | tail -40
+          echo "== 预准备 warp 源码（V=s 暴露 prepare 解压/补丁错误） =="
+          find build_dir -path '*stamp*' -name '*warp*' -exec rm -f {} \; 2>/dev/null
+          make package/mtk/drivers/warp/prepare V=s -j1 2>&1 | tee warp-prepare.log | tail -80
+          echo "--- warp 目录 ---"
+          ls -la build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.12.108/warp/ 2>/dev/null | head -25
+          echo "--- prepare 日志补丁错误 ---"
+          grep -n -B2 -A8 -i "patch\|error\|fail" warp-prepare.log | tail -70
           echo "== 手动执行 warp M= 编译（跳过 OpenWrt stamp，拿真实错误） =="
           KDIR=$(ls -d build_dir/target-*/linux-mediatek_filogic/linux-6.12.108 2>/dev/null | head -1)
           TC=$(ls -d staging_dir/toolchain-aarch64* 2>/dev/null | head -1)
@@ -335,6 +342,8 @@ jobs:
           echo "TC=$TC"
           ls -la "$KDIR/warp/" 2>/dev/null | head -30
           if [ -d "$KDIR/warp" ]; then
+            echo "--- warp 源码就绪，单独重编 warp 包 V=s（真实编译错误） ---"
+            make package/mtk/drivers/warp V=s -j1 2>&1 | tail -120
             make -C "$KDIR" V=1 ARCH=arm64 CROSS_COMPILE="$TC/bin/aarch64-openwrt-linux-musl-" \
               M="$KDIR/warp" \
               CONFIG_WARP_VERSION=2 CONFIG_WARP_DBG_SUPPORT=y CONFIG_WED_HW_RRO_SUPPORT=y \
@@ -342,8 +351,10 @@ jobs:
               CONFIG_SUPPORT_OPENWRT=y \
               modules 2>&1 | tail -120
           else
-            echo "warp 源码目录不存在！检查 dl 与解压"
+            echo "warp 源码目录仍不存在！检查 dl 与解压"
             ls -la dl/ 2>/dev/null | grep -i warp
+            echo "--- dl/warp tarball 校验 ---"
+            sha256sum dl/warp_*.tar.xz 2>/dev/null
           fi
           exit 1
         }
