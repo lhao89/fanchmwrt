@@ -68,18 +68,6 @@ jobs:
           # 5) 去掉 ImmortalWrt 独有的 autocore 默认包
           sed -i 's/kmod-gpio-button-hotplug autocore/kmod-gpio-button-hotplug/' target/linux/mediatek/Makefile
 
-          # 5.5) 修复 WARP 驱动的 -Werror 编译错误
-          #    fanchmwrt 内核编译选项更严格，chasey-dev 驱动代码里的小警告（未使用 label、缺少函数原型）
-          #    在 ImmortalWrt 里不报错，但在官方 OpenWrt 严格模式下会被 -Werror 升级为错误
-          #    给所有 MTK 内核驱动加 -Wno-error 降级，不影响功能
-          find package/mtk -name "Makefile" -path "*/src/*" -type f -exec sh -c '
-            if ! grep -q "Wno-error" "$1"; then
-              echo "" >> "$1"
-              echo "# Fix: disable -Werror for fanchmwrt strict kernel build" >> "$1"
-              echo "ccflags-y += -Wno-error" >> "$1"
-            fi
-          ' _ {} \;
-
           # 6) 从 chasey 官方样例配置生成 AX3000T 闭源驱动种子配置
           #    （剔除两个 ImmortalWrt 独有主题包与 ssr-plus，指定 AX3000T 双布局设备）
           mkdir -p configs
@@ -114,6 +102,20 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ env.PORT_BRANCH }}
+
+      - name: 修复 MTK 驱动 -Werror 编译错误
+        run: |
+          # fanchmwrt 内核编译选项更严格，chasey-dev 驱动代码里的小警告（未使用 label、缺少函数原型）
+          # 在 ImmortalWrt 里不报错，但在官方 OpenWrt 严格模式下会被 -Werror 升级为错误
+          # 给所有 MTK 内核驱动加 -Wno-error 降级，不影响功能
+          find package/mtk -name "Makefile" -path "*/src/*" -type f -exec sh -c '
+            if ! grep -q "Wno-error" "$1"; then
+              echo "" >> "$1"
+              echo "# Fix: disable -Werror for fanchmwrt strict kernel build" >> "$1"
+              echo "ccflags-y += -Wno-error" >> "$1"
+            fi
+          ' _ {} \;
+          echo "Done: patched MTK driver Makefiles with -Wno-error"
 
       - name: 安装编译依赖
         run: |
