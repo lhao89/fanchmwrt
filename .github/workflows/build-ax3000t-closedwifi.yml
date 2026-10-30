@@ -1,0 +1,160 @@
+# =====================================================================
+# fanchmwrt + 联发科(MTK)闭源无线驱动移植与小米 AX3000T 固件编译
+# =====================================================================
+# 用法：
+#   1. Fork fanchmwrt/fanchmwrt 到你的账号
+#   2. 在你的 fork 默认分支创建本文件: .github/workflows/build-ax3000t-closedwifi.yml
+#   3. 打开 Actions -> 选择本工作流 -> Run workflow
+#   4. 首次运行会自动完成"移植"(生成 mtk-closedwifi-25.12 分支)并开始编译
+#      编译约 2~5 小时，完成后在 Run 页面底部 Artifacts 下载固件
+#   5. 以后想同步上游最新源码重新移植: 勾选 force_port 再运行
+# =====================================================================
+name: Port MTK closed-wifi & Build AX3000T
+
+on:
+  workflow_dispatch:
+    inputs:
+      force_port:
+        description: "强制重新移植（拉取 chasey-dev 最新源码覆盖移植分支）"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  PORT_BRANCH: mtk-closedwifi-25.12
+  MTK_SRC: https://github.com/chasey-dev/immortalwrt-mt798x-rebase.git
+  MTK_BRANCH: "25.12"
+
+jobs:
+  port:
+    name: 移植 MTK 闭源驱动到 fanchmwrt
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 检出你的 fork
+        uses: actions/checkout@v4
+
+      - name: 移植闭源驱动并推送移植分支
+        run: |
+          set -e
+          BRANCH_EXISTS=$(git ls-remote --heads origin "${PORT_BRANCH}" | wc -l)
+          if [ "$BRANCH_EXISTS" = "1" ] && [ "${{ inputs.force_port }}" != "true" ]; then
+            echo "移植分支已存在，跳过移植。如需重做请勾选 force_port。"
+            exit 0
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 拉取 chasey-dev 的 ImmortalWrt-mt798x-rebase 25.12（闭源驱动源）
+          git clone --depth 1 --single-branch --branch "${MTK_BRANCH}" "${MTK_SRC}" /tmp/mtk-src
+
+          # 1) 替换 mediatek target（含 999 系列闭源驱动内核补丁 / HNAT / WED / 设备 DTS）
+          rm -rf target/linux/mediatek
+          cp -a /tmp/mtk-src/target/linux/mediatek target/linux/
+
+          # 2) 导入 package/mtk（mt_wifi / warp / conninfra / wifi-profile / l1parser / mtwifi-cfg / luci 应用）
+          rm -rf package/mtk
+          cp -a /tmp/mtk-src/package/mtk package/
+
+          # 3) netdevices.mk 含 kmod-mediatek_hnat 等必需内核模块定义
+          cp -a /tmp/mtk-src/package/kernel/linux/modules/netdevices.mk package/kernel/linux/modules/
+
+          # 4) iwinfo-ucode（mtwifi-cfg-ucode 依赖，官方 OpenWrt 侧没有）
+          rm -rf package/network/utils/iwinfo-ucode
+          cp -a /tmp/mtk-src/package/network/utils/iwinfo-ucode package/network/utils/
+
+          # 5) 去掉 ImmortalWrt 独有的 autocore 默认包
+          sed -i 's/kmod-gpio-button-hotplug autocore/kmod-gpio-button-hotplug/' target/linux/mediatek/Makefile
+
+          # 6) 从 chasey 官方样例配置生成 AX3000T 闭源驱动种子配置
+          #    （剔除两个 ImmortalWrt 独有主题包与 ssr-plus，指定 AX3000T 双布局设备）
+          mkdir -p configs
+          {
+            echo "# Xiaomi AX3000T (MT7981+MT7531) MTK closed-source mt_wifi - auto-generated"
+            echo "CONFIG_TARGET_mediatek=y"
+            echo "CONFIG_TARGET_mediatek_filogic=y"
+            echo ""
+            echo "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_xiaomi_mi-router-ax3000t=y"
+            echo "CONFIG_TARGET_DEVICE_PACKAGES_mediatek_filogic_DEVICE_xiaomi_mi-router-ax3000t=\"\""
+            echo "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_xiaomi_mi-router-ax3000t-ubootmod=y"
+            echo "CONFIG_TARGET_DEVICE_PACKAGES_mediatek_filogic_DEVICE_xiaomi_mi-router-ax3000t-ubootmod=\"\""
+            echo "CONFIG_TARGET_ROOTFS_INITRAMFS=y"
+            echo "CONFIG_CCACHE=y"
+            echo ""
+            tr -d '\r' < /tmp/mtk-src/defconfig/mt7981-ax3000.config \
+              | grep -v "^#" | grep -v "^$" \
+              | grep -vE "^CONFIG_TARGET_DEVICE|^CONFIG_TARGET_mediatek=y|^CONFIG_TARGET_mediatek_filogic=y|^CONFIG_PACKAGE_luci-app-ssr-plus|^CONFIG_PACKAGE_luci-theme-argon|^CONFIG_PACKAGE_luci-theme-bootstrap-mod|^CONFIG_INCLUDE_CONFIG=y|^CONFIG_JSON_OVERVIEW_IMAGE_INFO=y"
+          } > configs/ax3000t-closedwifi.config
+
+          git add -A
+          git commit -m "Port MTK closed-source wifi driver (mt_wifi) from immortalwrt-mt798x-rebase 25.12"
+          git push origin "HEAD:refs/heads/${PORT_BRANCH}"
+
+  build:
+    name: 编译 AX3000T 固件（闭源驱动）
+    needs: port
+    runs-on: ubuntu-22.04
+    timeout-minutes: 350
+    steps:
+      - name: 检出移植分支
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PORT_BRANCH }}
+
+      - name: 安装编译依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang flex bison g++ gawk gcc gettext \
+            git libncurses-dev libssl-dev python3-distutils rsync unzip zlib1g-dev file wget \
+            swig libelf-dev python3-dev python3-setuptools xxd ccache
+
+      - name: 缓存下载与编译缓存
+        uses: actions/cache@v4
+        with:
+          path: |
+            dl
+            .ccache
+          key: fanchmwrt-mtk-dl-v1
+          restore-keys: fanchmwrt-mtk-dl-
+
+      - name: 安装 feeds
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: 生成配置
+        run: |
+          cp configs/ax3000t-closedwifi.config .config
+          make defconfig
+          grep -E "TARGET_DEVICE.*ax3000t|MTK_CHIP_MT7981|kmod-mt_wifi" .config | head
+
+      - name: 预下载源码
+        run: make download -j$(nproc)
+
+      - name: 编译固件
+        run: |
+          make -j$(nproc) || make -j1 V=s
+
+      - name: 编译失败时上传日志
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            logs/
+            bin/targets/**/packages/*.skiplist
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: 上传固件产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ax3000t-closedwifi-firmware
+          path: |
+            bin/targets/mediatek/filogic/*sysupgrade*
+            bin/targets/mediatek/filogic/*initramfs*
+            bin/targets/mediatek/filogic/*.json
+            bin/targets/mediatek/filogic/sha256sums
+          retention-days: 30
