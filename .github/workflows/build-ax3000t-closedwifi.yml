@@ -103,19 +103,25 @@ jobs:
         with:
           ref: ${{ env.PORT_BRANCH }}
 
-      - name: 修复 MTK 驱动 -Werror 编译错误
+      - name: 修复 WARP 驱动 wed.c -Werror 编译错误
         run: |
-          # fanchmwrt 内核编译选项更严格，chasey-dev 驱动代码里的小警告（未使用 label、缺少函数原型）
-          # 在 ImmortalWrt 里不报错，但在官方 OpenWrt 严格模式下会被 -Werror 升级为错误
-          # 给所有 MTK 内核驱动加 -Wno-error 降级，不影响功能
-          find package/mtk -name "Makefile" -path "*/src/*" -type f -exec sh -c '
-            if ! grep -q "Wno-error" "$1"; then
-              echo "" >> "$1"
-              echo "# Fix: disable -Werror for fanchmwrt strict kernel build" >> "$1"
-              echo "ccflags-y += -Wno-error" >> "$1"
+          # fanchmwrt 内核编译选项更严格，chasey-dev 的 wed.c 里有两个小问题：
+          # 1. 第 587 行：label 'err' defined but not used (-Wunused-label)
+          # 2. 第 795/830 行：两个调试函数缺少原型声明 (-Wmissing-prototypes)
+          # 这些在 ImmortalWrt 里只是警告，在官方 OpenWrt 严格模式下被 -Werror 升级为错误
+          # 直接在 wed.c 开头加 pragma 忽略这两个警告，不影响驱动功能
+          WED_FILE="package/mtk/drivers/warp/wed.c"
+          if [ -f "$WED_FILE" ]; then
+            if ! grep -q "Wunused-label" "$WED_FILE"; then
+              sed -i '1i #pragma GCC diagnostic ignored "-Wunused-label"\n#pragma GCC diagnostic ignored "-Wmissing-prototypes"' "$WED_FILE"
+              echo "✅ Patched $WED_FILE: added pragma to ignore -Wunused-label and -Wmissing-prototypes"
+            else
+              echo "ℹ️  $WED_FILE already patched, skipping"
             fi
-          ' _ {} \;
-          echo "Done: patched MTK driver Makefiles with -Wno-error"
+          else
+            echo "⚠️  $WED_FILE not found, searching..."
+            find package/mtk -name "wed.c" -type f
+          fi
 
       - name: 安装编译依赖
         run: |
